@@ -8,6 +8,7 @@ global g_ClickState := {
     tick: 0,
     x: 0,
     y: 0,
+    whitespace: false,
 }
 
 #HotIf IsExplorerWindowActive()
@@ -34,14 +35,22 @@ HandleExplorerClick() {
 
     MouseGetPos &mouseX, &mouseY
 
+    ; カーソル直下が余白かどうかは、ナビゲーションが起きていない「今この瞬間」に判定する。
+    ; フォルダをダブルクリックして開いた直後だと、2 回目の Up 時点ではすでに移動先の
+    ; 余白を指してしまうため、毎回のクリックでこの値を捕まえておく。
+    isWhitespaceNow := IsExplorerWhitespace(explorerHwnd, mouseX, mouseY)
+
     if !IsDoubleClick(explorerHwnd, mouseX, mouseY) {
-        RememberClick(explorerHwnd, mouseX, mouseY)
+        RememberClick(explorerHwnd, mouseX, mouseY, isWhitespaceNow)
         return
     }
 
+    wasWhitespace := g_ClickState.whitespace
     ResetClickState()
 
-    if !IsExplorerWhitespace(explorerHwnd, mouseX, mouseY)
+    ; 1 回目と 2 回目の両方が余白上のクリックだったときだけ上の階層へ移動する。
+    ; 1 回目で項目を掴んでいたら、ナビゲーション後に 2 回目が余白に当たっても弾く。
+    if !(wasWhitespace && isWhitespaceNow)
         return
 
     Send "!{Up}"
@@ -73,13 +82,14 @@ IsDoubleClick(explorerHwnd, mouseX, mouseY) {
         && Abs(mouseY - g_ClickState.y) <= DllCall("GetSystemMetrics", "Int", SM_CYDOUBLECLK, "Int")
 }
 
-RememberClick(explorerHwnd, mouseX, mouseY) {
+RememberClick(explorerHwnd, mouseX, mouseY, isWhitespace) {
     global g_ClickState
 
     g_ClickState.hwnd := explorerHwnd
     g_ClickState.tick := A_TickCount
     g_ClickState.x := mouseX
     g_ClickState.y := mouseY
+    g_ClickState.whitespace := isWhitespace
 }
 
 ResetClickState() {
@@ -89,6 +99,7 @@ ResetClickState() {
     g_ClickState.tick := 0
     g_ClickState.x := 0
     g_ClickState.y := 0
+    g_ClickState.whitespace := false
 }
 
 IsExplorerWhitespace(explorerHwnd, mouseX, mouseY) {
@@ -112,7 +123,12 @@ IsExplorerWhitespace(explorerHwnd, mouseX, mouseY) {
     catch
         return false
 
-    return role = ROLE_SYSTEM_LIST || role = ROLE_SYSTEM_WHITESPACE
+    if role = ROLE_SYSTEM_WHITESPACE
+        return true
+
+    ; ファイルペイン本体は ROLE_SYSTEM_LIST を返す。コンテナそのもの (childId = 0)
+    ; に当たっているときだけを「余白」とみなし、リスト内の項目は除外する。
+    return role = ROLE_SYSTEM_LIST && childId = 0
 }
 
 AccObjectFromPoint(&childId, mouseX, mouseY) {
