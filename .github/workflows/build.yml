@@ -15,7 +15,10 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install AutoHotkey v2
-        run: choco install autohotkey --version=2.0.19 -y
+        run: |
+          $url = "https://github.com/AutoHotkey/AutoHotkey/releases/download/v2.0.24/AutoHotkey_2.0.24_setup.exe"
+          Invoke-WebRequest -Uri $url -OutFile "$env:TEMP\ahk-setup.exe"
+          Start-Process -FilePath "$env:TEMP\ahk-setup.exe" -ArgumentList "/S" -Wait
         shell: pwsh
 
       - name: Compile with Ahk2Exe
