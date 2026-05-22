@@ -10,6 +10,8 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    permissions:
+      contents: write
     env:
       AHK_VERSION: 2.0.26
       AHK2EXE_TAG: Ahk2Exe1.1.37.02a2
@@ -73,3 +75,4 @@ jobs:
         with:
           files: dist/ExplorerUp.exe
           generate_release_notes: true
+          token: ${{ secrets.GITHUB_TOKEN }}
