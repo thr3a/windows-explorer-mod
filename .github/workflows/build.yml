@@ -10,37 +10,53 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+    env:
+      AHK_VERSION: 2.0.26
+      AHK2EXE_TAG: Ahk2Exe1.1.37.02a2
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install AutoHotkey v2
-        run: choco install autohotkey --version=2.0.24 -y
-        shell: pwsh
+      - name: Download AutoHotkey toolchain
+        run: |
+          $toolRoot = Join-Path $env:RUNNER_TEMP "autohotkey"
+          $compilerDir = Join-Path $toolRoot "Compiler"
+          $ahkZip = Join-Path $env:RUNNER_TEMP "AutoHotkey_$env:AHK_VERSION.zip"
+          $ahk2exeZip = Join-Path $env:RUNNER_TEMP "$env:AHK2EXE_TAG.zip"
+
+          Remove-Item -Recurse -Force $toolRoot -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $compilerDir | Out-Null
+
+          Invoke-WebRequest -Uri "https://github.com/AutoHotkey/AutoHotkey/releases/download/v$env:AHK_VERSION/AutoHotkey_$env:AHK_VERSION.zip" -OutFile $ahkZip
+          Expand-Archive -Path $ahkZip -DestinationPath $toolRoot -Force
+
+          Invoke-WebRequest -Uri "https://github.com/AutoHotkey/Ahk2Exe/releases/download/$env:AHK2EXE_TAG/$env:AHK2EXE_TAG.zip" -OutFile $ahk2exeZip
+          Expand-Archive -Path $ahk2exeZip -DestinationPath $compilerDir -Force
+
+          $ahk2exe = Join-Path $compilerDir "Ahk2Exe.exe"
+          $ahkBase = Join-Path $toolRoot "AutoHotkey64.exe"
+
+          if (-not (Test-Path $ahk2exe)) {
+            throw "Ahk2Exe.exe was not extracted to $compilerDir"
+          }
+
+          if (-not (Test-Path $ahkBase)) {
+            throw "AutoHotkey64.exe was not extracted to $toolRoot"
+          }
+
+          "AHK2EXE=$ahk2exe" >> $env:GITHUB_ENV
+          "AHK_BASE=$ahkBase" >> $env:GITHUB_ENV
 
       - name: Compile with Ahk2Exe
         run: |
           New-Item -ItemType Directory -Force -Path dist | Out-Null
-          $candidates = @(
-            "C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe",
-            "C:\Program Files\AutoHotkey\v2\Compiler\Ahk2Exe.exe",
-            "C:\Program Files (x86)\AutoHotkey\Compiler\Ahk2Exe.exe",
-            "C:\Program Files (x86)\AutoHotkey\v2\Compiler\Ahk2Exe.exe",
-            "$env:LocalAppData\Programs\AutoHotkey\Compiler\Ahk2Exe.exe",
-            "$env:LocalAppData\Programs\AutoHotkey\v2\Compiler\Ahk2Exe.exe"
-          )
-
-          $ahk2exe = @(Get-Command Ahk2Exe.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source -ErrorAction SilentlyContinue) + $candidates |
-            Where-Object { $_ -and (Test-Path $_) } |
-            Select-Object -First 1
-
-          if (-not $ahk2exe) {
-            throw "Ahk2Exe.exe was not found. Checked: $($candidates -join ', ')"
-          }
-
-          Write-Host "Using Ahk2Exe: $ahk2exe"
-          & $ahk2exe /in src\ExplorerUp.ahk /out dist\ExplorerUp.exe /compress 2
+          Write-Host "Using Ahk2Exe: $env:AHK2EXE"
+          Write-Host "Using base: $env:AHK_BASE"
+          & $env:AHK2EXE /in src\ExplorerUp.ahk /out dist\ExplorerUp.exe /base $env:AHK_BASE /silent verbose
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Test-Path "dist\ExplorerUp.exe")) {
+            throw "dist\\ExplorerUp.exe was not created"
+          }
         shell: pwsh
 
       - name: Upload artifact
