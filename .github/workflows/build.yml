@@ -1,0 +1,42 @@
+name: Build ExplorerUp
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install AutoHotkey v2
+        run: choco install autohotkey --version=2.0.19 -y
+        shell: pwsh
+
+      - name: Compile with Ahk2Exe
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $ahk2exe = "C:\Program Files\AutoHotkey\Compiler\Ahk2Exe.exe"
+          & $ahk2exe /in src\ExplorerUp.ahk /out dist\ExplorerUp.exe /compress 2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        shell: pwsh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ExplorerUp
+          path: dist/ExplorerUp.exe
+          if-no-files-found: error
+
+      # タグ push 時のみ GitHub Release を作成して EXE を添付
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/ExplorerUp.exe
+          generate_release_notes: true
